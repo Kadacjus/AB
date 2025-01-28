@@ -160,7 +160,10 @@ class CFGDenoiser(torch.nn.Module):
         if sd_samplers_common.apply_refiner(self, sigma):
             cond = self.sampler.sampler_extra_args['cond']
             uncond = self.sampler.sampler_extra_args['uncond']
-
+               
+        # Ensures the scheduler respects the requested step count and halts excess iterations
+        if self.step >= self.total_steps:            
+            raise sd_samplers_common.InterruptedException
         # at self.image_cfg_scale == 1.0 produced results for edit model are the same as with normal sampling,
         # so is_edit_model is set to False to support AND composition.
         is_edit_model = shared.sd_model.cond_stage_key == "edit" and self.image_cfg_scale is not None and self.image_cfg_scale != 1.0
