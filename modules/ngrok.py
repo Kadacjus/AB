@@ -1,7 +1,7 @@
 import ngrok
 
 # Connect to ngrok for ingress
-def connect(token, port, options):
+def connect(token, port, options, domain):
     account = None
     if token is None:
         token = 'None'
@@ -18,7 +18,8 @@ def connect(token, port, options):
         options['basic_auth'] = account
     if not options.get('session_metadata'):
         options['session_metadata'] = 'stable-diffusion-webui'
-
+    if domain:
+        options['domain'] = domain
 
     try:
         public_url = ngrok.connect(f"127.0.0.1:{port}", **options).url()
