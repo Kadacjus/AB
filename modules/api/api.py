@@ -470,6 +470,8 @@ class Api:
                 p.scripts = script_runner
                 p.outpath_grids = opts.outdir_txt2img_grids
                 p.outpath_samples = opts.outdir_txt2img_samples
+                if p.firstpass_image is not None:
+                    p.firstpass_image = decode_base64_to_image(p.firstpass_image)
 
                 try:
                     shared.state.begin(job="scripts_txt2img")
