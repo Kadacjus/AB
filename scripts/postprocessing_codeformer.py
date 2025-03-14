@@ -29,6 +29,10 @@ class ScriptPostprocessingCodeFormer(scripts_postprocessing.ScriptPostprocessing
         res = Image.fromarray(restored_img)
 
         if codeformer_visibility < 1.0:
+            if pp.image.size != res.size:
+                res = res.resize(pp.image.size)
+            if pp.image.mode != res.mode:
+                res = res.convert(pp.image.mode)
             res = Image.blend(pp.image, res, codeformer_visibility)
 
         pp.image = res
