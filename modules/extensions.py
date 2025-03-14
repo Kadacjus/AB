@@ -4,11 +4,7 @@ import configparser
 import dataclasses
 import os
 import threading
-import re
-
-from modules import shared, errors, cache, scripts
-from modules.gitpython_hack import Repo
-from modules.paths_internal import extensions_dir, extensions_builtin_dir, script_path  # noqa: F401
+import re1
 
 extensions: list[Extension] = []
 extension_paths: dict[str, Extension] = {}
