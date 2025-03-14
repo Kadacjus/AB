@@ -2,8 +2,11 @@
 function extensions_apply(_disabled_list, _update_list, disable_all) {
     var disable = [];
     var update = [];
-
-    gradioApp().querySelectorAll('#extensions input[type="checkbox"]').forEach(function(x) {
+    const extensions_input = gradioApp().querySelectorAll('#extensions input[type="checkbox"]');
+    if (extensions_input.length == 0) {
+        throw Error("Extensions page not yet loaded.");
+    }
+    extensions_input.forEach(function(x) {
         if (x.name.startsWith("enable_") && !x.checked) {
             disable.push(x.name.substring(7));
         }
@@ -33,7 +36,7 @@ function extensions_check() {
 
 
     var id = randomId();
-    requestProgress(id, gradioApp().getElementById('extensions_installed_top'), null, function() {
+    requestProgress(id, gradioApp().getElementById('extensions_installed_html'), null, function() {
 
     });
 
@@ -71,4 +74,22 @@ function config_state_confirm_restore(_, config_state_name, config_restore_type)
         });
     }
     return [confirmed, config_state_name, config_restore_type];
+}
+
+function toggle_all_extensions(event) {
+    gradioApp().querySelectorAll('#extensions .extension_toggle').forEach(function(checkbox_el) {
+        checkbox_el.checked = event.target.checked;
+    });
+}
+
+function toggle_extension() {
+    let all_extensions_toggled = true;
+    for (const checkbox_el of gradioApp().querySelectorAll('#extensions .extension_toggle')) {
+        if (!checkbox_el.checked) {
+            all_extensions_toggled = false;
+            break;
+        }
+    }
+
+    gradioApp().querySelector('#extensions .all_extensions_toggle').checked = all_extensions_toggled;
 }

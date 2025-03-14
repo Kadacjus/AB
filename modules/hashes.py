@@ -1,38 +1,11 @@
 import hashlib
-import json
 import os.path
 
-import filelock
+from modules import shared, errors
+import modules.cache
 
-from modules import shared
-from modules.paths import data_path
-
-
-cache_filename = os.path.join(data_path, "cache.json")
-cache_data = None
-
-
-def dump_cache():
-    with filelock.FileLock(f"{cache_filename}.lock"):
-        with open(cache_filename, "w", encoding="utf8") as file:
-            json.dump(cache_data, file, indent=4)
-
-
-def cache(subsection):
-    global cache_data
-
-    if cache_data is None:
-        with filelock.FileLock(f"{cache_filename}.lock"):
-            if not os.path.isfile(cache_filename):
-                cache_data = {}
-            else:
-                with open(cache_filename, "r", encoding="utf8") as file:
-                    cache_data = json.load(file)
-
-    s = cache_data.get(subsection, {})
-    cache_data[subsection] = s
-
-    return s
+dump_cache = modules.cache.dump_cache
+cache = modules.cache.cache
 
 
 def calculate_sha256(filename):
@@ -48,7 +21,10 @@ def calculate_sha256(filename):
 
 def sha256_from_cache(filename, title, use_addnet_hash=False):
     hashes = cache("hashes-addnet") if use_addnet_hash else cache("hashes")
-    ondisk_mtime = os.path.getmtime(filename)
+    try:
+        ondisk_mtime = os.path.getmtime(filename)
+    except FileNotFoundError:
+        return None
 
     if title not in hashes:
         return None
@@ -56,7 +32,7 @@ def sha256_from_cache(filename, title, use_addnet_hash=False):
     cached_sha256 = hashes[title].get("sha256", None)
     cached_mtime = hashes[title].get("mtime", 0)
 
-    if ondisk_mtime > cached_mtime or cached_sha256 is None:
+    if ondisk_mtime != cached_mtime or cached_sha256 is None:
         return None
 
     return cached_sha256
@@ -106,3 +82,31 @@ def addnet_hash_safetensors(b):
 
     return hash_sha256.hexdigest()
 
+
+def partial_hash_from_cache(filename, *, ignore_cache: bool = False, digits: int = 8):
+    """old hash that only looks at a small part of the file and is prone to collisions
+    kept for compatibility, don't use this for new things
+    """
+    try:
+        filename = str(filename)
+        mtime = os.path.getmtime(filename)
+        hashes = cache('partial-hash')
+        cache_entry = hashes.get(filename, {})
+        cache_mtime = cache_entry.get("mtime", 0)
+        cache_hash = cache_entry.get("hash", None)
+        if mtime == cache_mtime and cache_hash and not ignore_cache:
+            return cache_hash[0:digits]
+
+        with open(filename, 'rb') as file:
+            m = hashlib.sha256()
+            file.seek(0x100000)
+            m.update(file.read(0x10000))
+            partial_hash = m.hexdigest()
+            hashes[filename] = {'mtime': mtime, 'hash': partial_hash}
+            return partial_hash[0:digits]
+
+    except FileNotFoundError:
+        pass
+    except Exception:
+        errors.report(f'Error calculating partial hash for {filename}', exc_info=True)
+    return 'NOFILE'
