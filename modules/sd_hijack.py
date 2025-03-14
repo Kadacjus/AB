@@ -38,8 +38,12 @@ ldm.models.diffusion.ddpm.print = shared.ldm_print
 optimizers = []
 current_optimizer: sd_hijack_optimizations.SdOptimization = None
 
-ldm_original_forward = patches.patch(__file__, ldm.modules.diffusionmodules.openaimodel.UNetModel, "forward", sd_unet.UNetModel_forward)
-sgm_original_forward = patches.patch(__file__, sgm.modules.diffusionmodules.openaimodel.UNetModel, "forward", sd_unet.UNetModel_forward)
+ldm_patched_forward = sd_unet.create_unet_forward(ldm.modules.diffusionmodules.openaimodel.UNetModel.forward)
+ldm_original_forward = patches.patch(__file__, ldm.modules.diffusionmodules.openaimodel.UNetModel, "forward", ldm_patched_forward)
+
+sgm_patched_forward = sd_unet.create_unet_forward(sgm.modules.diffusionmodules.openaimodel.UNetModel.forward)
+sgm_original_forward = patches.patch(__file__, sgm.modules.diffusionmodules.openaimodel.UNetModel, "forward", sgm_patched_forward)
+
 
 def list_optimizers():
     new_optimizers = script_callbacks.list_optimizers_callback()
@@ -303,8 +307,6 @@ class StableDiffusionModelHijack:
         self.layers = None
         self.clip = None
 
-        sd_unet.original_forward = None
-
 
     def apply_circular(self, enable):
         if self.circular_enabled == enable:
@@ -323,7 +325,10 @@ class StableDiffusionModelHijack:
         if self.clip is None:
             return "-", "-"
 
-        _, token_count = self.clip.process_texts([text])
+        if hasattr(self.clip, 'get_token_count'):
+            token_count = self.clip.get_token_count(text)
+        else:
+            _, token_count = self.clip.process_texts([text])
 
         return token_count, self.clip.get_target_prompt_token_count(token_count)
 
@@ -354,11 +359,26 @@ class EmbeddingsWithFixes(torch.nn.Module):
                 vec = embedding.vec[self.textual_inversion_key] if isinstance(embedding.vec, dict) else embedding.vec
                 emb = devices.cond_cast_unet(vec)
                 emb_len = min(tensor.shape[0] - offset - 1, emb.shape[0])
-                tensor = torch.cat([tensor[0:offset + 1], emb[0:emb_len], tensor[offset + 1 + emb_len:]])
+                tensor = torch.cat([tensor[0:offset + 1], emb[0:emb_len], tensor[offset + 1 + emb_len:]]).to(dtype=inputs_embeds.dtype)
 
             vecs.append(tensor)
 
         return torch.stack(vecs)
+
+
+class TextualInversionEmbeddings(torch.nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, textual_inversion_key='clip_l', **kwargs):
+        super().__init__(num_embeddings, embedding_dim, **kwargs)
+
+        self.embeddings = model_hijack
+        self.textual_inversion_key = textual_inversion_key
+
+    @property
+    def wrapped(self):
+        return super().forward
+
+    def forward(self, input_ids):
+        return EmbeddingsWithFixes.forward(self, input_ids)
 
 
 def add_circular_option_to_conv_2d():
